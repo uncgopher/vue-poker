@@ -1,17 +1,37 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <h1>Poker Tournament Helper</h1>
+    <div id="userList">
+      <h3>Current Players</h3>
+      <div v-for="user in gData.users" class="userListItem">{{ user.name }}</div>
+      <input v-model="addUser" type="text"> <button id="addUserBtn" v-on:click="addUserFn">Add Player</button>
+    </div>
+
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
-
 export default {
   name: 'app',
   components: {
-    HelloWorld
+
+  },
+  props: ['gameData'],
+  data(){
+    return {
+      addUser: null,
+      gData: this.$parent.gameData
+    }
+  },
+  methods: {
+    addUserFn: function() {
+      console.log(this.addUser)
+    }
+  },
+  mounted: function(){
+    this.$nextTick(function(){
+      console.log('data: ')
+    })
   }
 }
 </script>
@@ -23,6 +43,14 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  max-width: 90%;
+  margin: 30px auto 0 auto;
+}
+#userList{
+  max-width: 200px;
+  float: left;
+}
+.userListItem{
+  margin: 0 auto 15px auto;
 }
 </style>
