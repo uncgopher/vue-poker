@@ -8,9 +8,14 @@
   max-width: 90%;
   margin: 30px auto 0 auto;
 }
-#status,#controls{
+#status,#controls,#rebalance{
   height:50px;
   vertical-align: middle;
+}
+#rebalance{
+  color: red;
+  font-size: 24px;
+  font-weight: bold;
 }
 #userContainer{
   width: 100%;
@@ -50,17 +55,21 @@
 
 <template>
   <div id="app">
-    <h1>Poker Tournament Helper</h1>
+    <h1>Helper</h1>
 
     <div id="status">
       <span v-if="currentRound==0">Pending Setup</span>
       <span v-if="currentRound>0">Round #{{currentRound}}<br/>{{formatTimeRemaining}}</span>
     </div>
 
+    <div id="rebalance">
+      {{ playerMoved }}
+    </div>
+
     <div id="controls">
       <button id="startBtn" v-on:click="startTournament" v-if="currentRound==0">Start Tournament</button>
-      <button id="pauseBtn" v-on:click="pauseTournament" v-if="currentRound>0 && paused==false">Pause Timer</button>
-      <button id="unpauseBtn" v-on:click="unpauseTournament" v-if="currentRound>0 && paused==true">Resume Timer</button>
+      <button id="pauseBtn" v-on:click="pauseTournament" v-if="currentRound>0 && paused==false && tournamentCompleted==false">Pause Timer</button>
+      <button id="unpauseBtn" v-on:click="unpauseTournament" v-if="currentRound>0 && paused==true && tournamentCompleted==false">Resume Timer</button>
       <button id="endTournamentBtn" v-on:click="endTournament" v-if="currentRound>0">End Tournament</button>
     </div>
 
@@ -84,12 +93,12 @@
       <div id="tableList">
         <div v-for="(tableValue, tableKey, tableIndex) in tData.tables" :key="tableKey" class="table">
           <h3>Table #{{ tableIndex+1 }}</h3>
-          <div v-for="(playerValue, playerKey, playerIndex) in tableValue" :key="playerValue" class="table_player">
+          <div v-for="(playerValue, playerKey, playerIndex) in tableValue.seated" :key="playerValue" class="table_player">
             {{ playerKey }} <span class="user_table_remove" v-on:click="removeUserTableFn(tableKey, playerKey, playerValue)">Knocked Out</span>
           </div>
         </div>
       </div>
-      <div id="placementList">
+      <div id="placementList" v-show="currentRound>0">
         <h3>Placement</h3>
         <div v-for="(tableValue, tableKey, tableIndex) in tData.placementList" :key="tableKey" class="placement">
           {{ tableKey+'. '+tableValue }}
@@ -104,6 +113,27 @@
 </template>
 
 <script>
+function shuffle(arrSize) {
+  // build array
+  var array = [];
+  for(var i=0;i<arrSize;i++) array.push(i);
+  var currentIndex = array.length, temporaryValue, randomIndex;
+
+  // While there remain elements to shuffle...
+  while (0 !== currentIndex) {
+
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex -= 1;
+
+    // And swap it with the current element.
+    temporaryValue = array[currentIndex];
+    array[currentIndex] = array[randomIndex];
+    array[randomIndex] = temporaryValue;
+  }
+
+  return array;
+}
 var store = {
   state: {
     users: [
@@ -172,29 +202,33 @@ var store = {
     // setup
     var users = this.state.users;
     var playerCount = users.length;
-    var tables = this.state.tables;
     this.state.finishedPlace = playerCount;
+    var tables = this.state.tables;
+
+
+    // get shuffled order
+    var shuffled = shuffle(playerCount);
 
     // sort by size
     if(playerCount < 8){
       // undersized
       this.state.tableSize = 1;
-      tables['table_1'] = [];
+      tables['table_1'] = {seated:{},count:0};
       for(var i=0;i<playerCount;i++){
-        var tempUser = users[i].name;
-        tables['table_1'].push({tempUser: i})
+        tables['table_1']['seated'][users[shuffled[i]].name] = i;
+        tables['table_1']['count']++;
       }
     }else{
       // determine number of tables
       var tableCount = Math.ceil(playerCount/5);
       this.state.tableSize = tableCount;
-      for(var i=1;i<=tableCount;i++) tables['table_'+i] = {};
+      for(var i=1;i<=tableCount;i++) tables['table_'+i] = {seated:{},count:0};
 
       // deploy players
       var curTable = 1;
       for(var i=0;i<playerCount;i++){
-        var obj = {};
-        tables['table_'+curTable][users[i].name] = i;
+        tables['table_'+curTable]['seated'][users[shuffled[i]].name] = i;
+        tables['table_'+curTable]['count']++;
         curTable++;
         if(curTable > tableCount) curTable = 1;
       }
@@ -202,6 +236,8 @@ var store = {
   },
   resetTables(){
     this.state.tables = {};
+    this.state.tableSize = 0;
+    this.state.placementList = {};
   },
   addUser (newUser) {
     // must not be blank
@@ -237,19 +273,108 @@ var store = {
     this.state.finishedPlace--;
 
     // remove user from table
-    delete this.state.tables[tableIndex][playerIndex];
+    delete this.state.tables[tableIndex]['seated'][playerIndex];
+    this.state.tables[tableIndex]['count']--;
 
-    // rebalance tables?
-    var minLength = this.state.tables['table_1'].length,
-        maxLength = this.state.tables['table_1'].length;
-    console.log(this.state.tables);
+    // check for rebalance
+    var minLength = null, minLengthTable = null,
+      maxLength = null, maxLengthTable = null,
+      playersLeft = 0, tablesOpen = 0;
     for(var i=1;i<=this.state.tableSize;i++){
-      var curLength = this.state.tables['table_'+i].length;
-      console.log(curLength);
-      if(curLength < minLength) minLength = curLength;
-      if(curLength > maxLength) maxLength = curLength;
+      var curLength = this.state.tables['table_'+i].count;
+      playersLeft = playersLeft + curLength;
+
+      // skip empty tables
+      if(curLength == 0) continue;
+      tablesOpen++;
+
+      // first table hit
+      if(minLength == null){
+        minLength = curLength;
+        minLengthTable = 'table_'+i;
+        maxLength = curLength;
+        maxLengthTable = 'table_'+i;
+      }
+
+      // check for new min/max
+      if(curLength < minLength){
+        minLength = curLength;
+        minLengthTable = 'table_'+i;
+      }
+      if(curLength > maxLength){
+        maxLength = curLength;
+        maxLengthTable = 'table_'+i;
+      }
     }
-    if(maxLength > minLength + 1) console.log('rebalance')
+
+    // if 1 person remaining, they win
+    if(playersLeft == 1){
+      // find remaining player
+      for(var prop in this.state.tables[maxLengthTable]['seated']) {
+        // move to first place
+        var finalPlayerOrgKey = this.state.tables[maxLengthTable]['seated'][prop];
+        this.state.users[finalPlayerOrgKey].finishedPosition = this.state.finishedPlace;
+        this.state.placementList[this.state.finishedPlace] = prop;
+        this.state.finishedPlace--;
+
+        // remove user from table
+        delete this.state.tables[maxLengthTable]['seated'][prop];
+        this.state.tables[maxLengthTable]['count']--;
+        return {rebalance: true, type: 'completed', player: prop};
+      }
+    }else if(playersLeft <= 5 && tablesOpen > 1){
+      // if 5 people or less remaining, combine to one table
+      for(var i=1;i<=this.state.tableSize;i++){
+        if('table_'+i != maxLengthTable){
+          // move player
+          for(var prop in this.state.tables['table_'+i]['seated']) {
+            // add player to new table
+            this.state.tables[maxLengthTable]['seated'][prop] = this.state.tables['table_'+i]['seated'][prop];
+            this.state.tables[maxLengthTable]['count']++;
+
+            // remove user from table
+            delete this.state.tables['table_'+i]['seated'][prop];
+            this.state.tables['table_'+i]['count']--;
+          }
+        }
+      }
+
+      // notify
+      return {rebalance: true, type: 'table'};
+    }else{
+      // compare table sizes
+      if(maxLength > minLength + 1 || minLength == 1){
+        // for a table size of one, you move to the largest if it's size 2
+        if(minLength == 1 && maxLength == 2){
+          // swap the tables
+          var tempHolder = maxLengthTable;
+          maxLengthTable = minLengthTable;
+          minLengthTable = tempHolder;
+        }
+
+        // run rebalance - get player to move
+        var playerToMove, playerToMovePos = 0;
+        for(var prop in this.state.tables[maxLengthTable]['seated']) {
+          playerToMove = prop;
+          playerToMovePos = this.state.tables[maxLengthTable]['seated'][playerToMove];
+          break;
+        }
+
+        // remove user from table
+        delete this.state.tables[maxLengthTable]['seated'][playerToMove];
+        this.state.tables[maxLengthTable]['count']--;
+
+        // add player to new table
+        this.state.tables[minLengthTable]['seated'][playerToMove] = playerToMovePos;
+        this.state.tables[minLengthTable]['count']++;
+
+        // return info
+        return {rebalance: true, type: 'single', player: playerToMove, newTable: minLengthTable};
+      }else{
+        // no rebalance needed
+        return {rebalance: false};
+      }
+    }
   },
   setRoundTime(newTime){
     newTime = round(newTime);
@@ -288,7 +413,9 @@ export default {
       timeRemaining: null,
       formatTimeRemaining: null,
       paused: false,
-      tournamentTicker: null
+      tournamentTicker: null,
+      playerMoved: '',
+      tournamentCompleted: false
     }
   },
   computed: {
@@ -307,7 +434,21 @@ export default {
       store.clearUsers();
     },
     removeUserTableFn: function(tableKey, playerIndex, orgKey){
-      store.removeUserFromTable(tableKey, playerIndex, orgKey);
+      var result = store.removeUserFromTable(tableKey, playerIndex, orgKey);
+      if(result.rebalance){
+        // alert for a rebalance
+        if(result.type == 'single'){
+          this.playerMoved = result.player+' => Table #'+result.newTable.replace("table_", "");
+        }else if(result.type == 'table'){
+          this.playerMoved = 'Combine All Tables';
+        }else if(result.type == 'completed'){
+          this.playerMoved = result.player+' Wins!';
+          this.tournamentCompleted = true;
+        }
+      }else{
+        // remove rebalance notice
+        this.playerMoved = '';
+      }
     },
     pauseTournament: function(){
       if(this.paused == false){
@@ -326,8 +467,11 @@ export default {
     startTournament: function(){
       // must have at least 2 players
       if(this.tData.users.length >= 2){
-        // set round
+        // setup
         this.currentRound = 1;
+        this.tournamentCompleted = false;
+        this.paused = false;
+        this.playerMoved = '';
 
         // sort players in to tables
         store.playersToTables();
@@ -347,7 +491,7 @@ export default {
       store.resetTables();
     },
     timerUpdate: function(){
-      if(this.timeRemaining && this.timeRemaining > 0){
+      if(this.timeRemaining && this.timeRemaining > 0 && this.tournamentCompleted == false){
         var sec_num = parseInt(this.timeRemaining, 10)
         var hours   = Math.floor(sec_num / 3600) % 24
         var minutes = Math.floor(sec_num / 60) % 60
