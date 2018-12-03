@@ -53,6 +53,10 @@
 #endTournamentBtn{margin-left:20px;}
 #explainer{
   margin: 50px auto 50px auto;
+  background-color: #f1f1f1;
+  border: 1px solid #989898;
+  padding: 8px;
+  border-radius: 10px;
 }
 .btn-group-xs > .btn, .btn-xs {
   padding  : .4rem .6rem !important;
