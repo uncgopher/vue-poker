@@ -33,17 +33,18 @@
 }
 #userList,#newUser{margin-bottom: 20px;}
 #newUserError{height:30px;padding-top:10px;}
-#tableList{
+#tableList,#placementList{
   float: left;
   margin-left: 50px;
-  min-width: 300px;
+  min-width: 200px;
 }
 .table{
   width: 100%;
-  max-width: 300px;
+  max-width: 200px;
 }
 .table_player{text-align: left;}
 .user_table_remove{float: right;}
+.placement{text-align: left;}
 #endTournamentBtn{margin-left:20px;}
 </style>
 
@@ -88,6 +89,12 @@
           </div>
         </div>
       </div>
+      <div id="placementList">
+        <h3>Placement</h3>
+        <div v-for="(tableValue, tableKey, tableIndex) in tData.placementList" :key="tableKey" class="placement">
+          {{ tableKey+'. '+tableValue }}
+        </div>
+      </div>
     </div>
 
     <div>
@@ -101,7 +108,7 @@ var store = {
   state: {
     users: [
       {
-        name: 'Mark',        
+        name: 'Mark',
         finishedPosition: null
       },
       {
@@ -157,7 +164,9 @@ var store = {
     blindIncrease: 100,
     roundTime: 1,
     tables: {},
-    finishedPlace: null
+    tableSize: 0,
+    finishedPlace: null,
+    placementList: {}
   },
   playersToTables(){
     // setup
@@ -169,6 +178,7 @@ var store = {
     // sort by size
     if(playerCount < 8){
       // undersized
+      this.state.tableSize = 1;
       tables['table_1'] = [];
       for(var i=0;i<playerCount;i++){
         var tempUser = users[i].name;
@@ -177,6 +187,7 @@ var store = {
     }else{
       // determine number of tables
       var tableCount = Math.ceil(playerCount/5);
+      this.state.tableSize = tableCount;
       for(var i=1;i<=tableCount;i++) tables['table_'+i] = {};
 
       // deploy players
@@ -222,10 +233,23 @@ var store = {
   removeUserFromTable(tableIndex, playerIndex, orgKey){
     // update player's finishing position
     this.state.users[orgKey].finishedPosition = this.state.finishedPlace;
+    this.state.placementList[this.state.finishedPlace] = playerIndex;
     this.state.finishedPlace--;
 
     // remove user from table
     delete this.state.tables[tableIndex][playerIndex];
+
+    // rebalance tables?
+    var minLength = this.state.tables['table_1'].length,
+        maxLength = this.state.tables['table_1'].length;
+    console.log(this.state.tables);
+    for(var i=1;i<=this.state.tableSize;i++){
+      var curLength = this.state.tables['table_'+i].length;
+      console.log(curLength);
+      if(curLength < minLength) minLength = curLength;
+      if(curLength > maxLength) maxLength = curLength;
+    }
+    if(maxLength > minLength + 1) console.log('rebalance')
   },
   setRoundTime(newTime){
     newTime = round(newTime);
