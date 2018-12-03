@@ -8,27 +8,27 @@
   max-width: 90%;
   margin: 30px auto 0 auto;
 }
-#status,#controls,#rebalance{
+#status,#controls{
   height:50px;
   vertical-align: middle;
 }
 #rebalance{
-  color: red;
-  font-size: 24px;
-  font-weight: bold;
+  margin:10px;
+  display: inline-block;
+  font-weight: 700;
 }
 #userContainer{
-  width: 100%;
-  display: table;
-  margin-bottom: 20px;
+  margin: 20px 0;
 }
-#userManage{
-  width: 100%;
-  border: 1px solid #ddd;
-  padding: 5px;
-  max-width: 300px;
-  float: left;
+#userManage,#placementList{
   text-align: left;
+  background-color: #fff6eb;
+  border: 1px solid #989898;
+  padding: 8px;
+  border-radius: 10px;
+}
+#addUserBtn{
+  margin-left: 10px;
 }
 .userListItem{
   margin: 0 auto 15px auto;
@@ -38,76 +38,97 @@
 }
 #userList,#newUser{margin-bottom: 20px;}
 #newUserError{height:30px;padding-top:10px;}
-#tableList,#placementList{
-  float: left;
-  margin-left: 50px;
-  min-width: 200px;
-}
-.table{
+.pokerTable{
   width: 100%;
   max-width: 200px;
+  margin: 0px auto 30px auto;
+  background-color: #dfffe1;
+  border: 1px solid #989898;
+  padding: 8px;
+  border-radius: 10px;
 }
 .table_player{text-align: left;}
-.user_table_remove{float: right;}
+.user_table_remove{margin:-4px 10px 0 0;}
 .placement{text-align: left;}
 #endTournamentBtn{margin-left:20px;}
+#explainer{
+  margin: 50px auto 50px auto;
+}
+.btn-group-xs > .btn, .btn-xs {
+  padding  : .4rem .6rem !important;
+  font-size  : .875rem !important;
+  line-height  : .5 !important;
+  border-radius : .2rem !important;
+}
 </style>
 
 <template>
   <div id="app">
-    <h1>Helper</h1>
+    <h1>Poker Tournament Helper</h1>
 
-    <div id="status">
-      <span v-if="currentRound==0">Pending Setup</span>
-      <span v-if="currentRound>0">Round #{{currentRound}}<br/>{{formatTimeRemaining}}</span>
+    <div class="row">
+      <div id="status" class="col-md-12">
+        <span v-if="currentRound==0">Pending Setup</span>
+        <span v-if="currentRound>0">Round #{{currentRound}}<br/>{{formatTimeRemaining}}</span>
+      </div>
     </div>
 
     <div id="rebalance">
-      {{ playerMoved }}
+      <div class="alert alert-danger" v-if="playerMoved!=''">{{ playerMoved }}</div>
     </div>
 
     <div id="controls">
-      <button id="startBtn" v-on:click="startTournament" v-if="currentRound==0">Start Tournament</button>
-      <button id="pauseBtn" v-on:click="pauseTournament" v-if="currentRound>0 && paused==false && tournamentCompleted==false">Pause Timer</button>
-      <button id="unpauseBtn" v-on:click="unpauseTournament" v-if="currentRound>0 && paused==true && tournamentCompleted==false">Resume Timer</button>
-      <button id="endTournamentBtn" v-on:click="endTournament" v-if="currentRound>0">End Tournament</button>
+      <button id="startBtn" v-on:click="startTournament" class="btn btn-primary" v-if="currentRound==0 && this.tData.users.length>=2">Start Tournament</button>
+      <button id="pauseBtn" v-on:click="pauseTournament" class="btn btn-secondary" v-if="currentRound>0 && paused==false && tournamentCompleted==false">Pause Timer</button>
+      <button id="unpauseBtn" v-on:click="unpauseTournament" class="btn btn-info" v-if="currentRound>0 && paused==true && tournamentCompleted==false">Resume Timer</button>
+      <button id="endTournamentBtn" v-on:click="endTournament" class="btn btn-danger" v-if="currentRound>0">End Tournament</button>
     </div>
 
-    <div id="userContainer">
-      <div id="userManage">
+    <div id="userContainer" class="row">
+      <div id="userManage" class="col-md-3 col-sm-12">
         <h3>Current Players ({{ tData.users.length }})</h3>
         <div id="userList">
           <div v-for="(value, key) in tData.users" :key="key" v-bind:id="'user_item_'+key" class="userListItem">
-            {{ value.name }} <span class="user_remove" v-on:click="removeUserFn(key)" v-if="currentRound==0">Remove</span>
+            <button class="user_table_remove btn btn-xs btn-danger" v-on:click="removeUserFn(key)" v-if="currentRound==0">X</button> {{ value.name }}
           </div>
         </div>
         <div id="newUser">
-          <input v-model="addUser" type="text" placeholder="Add Player" @keyup.enter="addUserFn">
-          <button id="addUserBtn" v-on:click="addUserFn" v-show="addUser">Add Player</button>
+          <input v-model.trim="addUser" style="padding-right:5px;" v-if="currentRound==0" type="text" placeholder="Add Player" @keyup.enter="addUserFn">
+          <button id="addUserBtn" class="btn btn-sm btn-success" v-on:click="addUserFn" v-if="addUser">Add</button>
           <div id="newUserError">{{ newUserErrorMsg }}</div>
         </div>
         <div id="wipeUsers">
-          <button id='clearUsersBtn' v-on:click="clearUsersFn">Remove All Players</button>
+          <button id="clearUsersBtn" class="btn btn-danger" v-if="currentRound==0" v-on:click="clearUsersFn">Remove All Players</button>
         </div>
       </div>
-      <div id="tableList">
-        <div v-for="(tableValue, tableKey, tableIndex) in tData.tables" :key="tableKey" class="table">
+
+      <div id="tableList" class="col-md-6 col-sm-12">
+        <div v-for="(tableValue, tableKey, tableIndex) in tData.tables" :key="tableKey" class="pokerTable">
           <h3>Table #{{ tableIndex+1 }}</h3>
-          <div v-for="(playerValue, playerKey, playerIndex) in tableValue.seated" :key="playerValue" class="table_player">
-            {{ playerKey }} <span class="user_table_remove" v-on:click="removeUserTableFn(tableKey, playerKey, playerValue)">Knocked Out</span>
+          <div v-for="(playerValue, playerKey) in tableValue.seated" :key="playerValue" class="table_player">
+            <button class="user_table_remove btn btn-xs btn-dark" v-on:click="removeUserTableFn(tableKey, playerKey, playerValue)">X</button> {{ playerKey }}
           </div>
         </div>
       </div>
-      <div id="placementList" v-show="currentRound>0">
-        <h3>Placement</h3>
-        <div v-for="(tableValue, tableKey, tableIndex) in tData.placementList" :key="tableKey" class="placement">
-          {{ tableKey+'. '+tableValue }}
+
+      <div class="col-md-3 col-sm-12">
+        <div id="placementList" v-show="currentRound>0">
+          <h3>Placement</h3>
+          <div v-for="(tableValue, tableKey) in tData.placementList" :key="tableKey" class="placement">
+            {{ tableKey+'. '+tableValue }}
+          </div>
         </div>
       </div>
     </div>
 
-    <div>
-      {{ tData.users }}
+    <div id="explainer">
+      <h4>Instructions</h4>
+      Start with the default players, add your own, or remove all to start from
+      scratch. At least two players must be in the list to start the tournament.
+      Players are automatically moved between tables to keep things balanced and
+      at 5 players, everyone is moved to a single table.
+      <br/><br/>
+      Github: <a href='https://github.com/uncgopher/vue-poker'>https://github.com/uncgopher/vue-poker</a>
     </div>
   </div>
 </template>
@@ -377,7 +398,7 @@ var store = {
     }
   },
   setRoundTime(newTime){
-    newTime = round(newTime);
+    newTime = Math.round(newTime);
     if(newTime > 0 && newTime <= 180){
       this.state.roundTime = newTime;
       return {success: true};
